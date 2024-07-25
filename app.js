@@ -61,7 +61,7 @@ app.post("/login", async (req, res) => {
     if(result){
       let token = jwt.sign({email: email, userid:user._id}, "shhhhh");
       res.cookie("token", token);
-      res.status(200).send("you can login");
+      res.status(200).redirect("profile");
     } 
      else res.redirect("/login");
   });
@@ -69,8 +69,44 @@ app.post("/login", async (req, res) => {
 });
 
 app.get("/profile", isLoggdIn,async (req, res) => {
-  res.send(req.user);
-  res.send("your profile here");
+  let user = await userModel.findOne({email: req.user.email}).populate("post");
+  res.render("profile", {user});
+});
+
+app.get("/like/:id", isLoggdIn,async (req, res) => {
+  let post = await postModel.findOne({_id: req.params.id}).populate("user");
+
+  if(post.likes.indexOf(req.user.userid)=== -1){
+    post.likes.push(req.user.userid);
+  }
+  else{
+    post.likes.splice(post.likes.indexOf(req.user.userid), 1);
+  }
+  await post.save();
+  res.redirect("/profile");
+});
+
+app.get("/edit/:id", isLoggdIn,async (req, res) => {
+  let post = await postModel.findOne({_id: req.params.id}).populate("user");
+  res.render("edit",{post});
+});
+
+app.post("/update/:id", isLoggdIn,async (req, res) => {
+  let post = await postModel.findOneAndUpdate({_id: req.params.id}, {content: req.body.content});
+  res.redirect("/profile");
+});
+
+app.post("/post", isLoggdIn,async (req, res) => {
+  let user = await userModel.findOne({email: req.user.email});
+
+  let {content} = req.body;
+  let post = await postModel.create({
+    user: user._id,
+    content: content,
+  });
+  user.post.push(post._id);
+  await user.save()
+  res.redirect("/profile");
 });
 
 app.get("/logout", async (req, res) => {
@@ -79,7 +115,7 @@ app.get("/logout", async (req, res) => {
 });
 
 function isLoggdIn(req, res, next){
-  if(req.cookies.token == "") res.send("you must be logged in");
+  if(req.cookies.token == "") res.redirect("login");
   else{
     let data = jwt.verify(req.cookies.token, "shhhhh");
     req.user = data;
